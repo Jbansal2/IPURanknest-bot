@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const { Telegraf } = require('telegraf');
 
 let cachedDb = null;
+let cachedClient = null;
 
 async function connectDB() {
     if (cachedDb) {
@@ -11,9 +12,15 @@ async function connectDB() {
     }
     
     const client = await MongoClient.connect(process.env.MONGODB_URI, {
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
+        tls: true,
+        tlsAllowInvalidCertificates: false,
+        retryWrites: true,
+        retryReads: true,
+        maxPoolSize: 1,
     });
+    cachedClient = client;
     const db = client.db('ipu_bot');
     cachedDb = db;
     return db;
