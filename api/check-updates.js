@@ -10,7 +10,10 @@ async function connectDB() {
         return cachedDb;
     }
     
-    const client = await MongoClient.connect(process.env.MONGODB_URI);
+    const client = await MongoClient.connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+    });
     const db = client.db('ipu_bot');
     cachedDb = db;
     return db;
