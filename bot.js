@@ -462,25 +462,7 @@ bot.command('unsubscribe', async (ctx) => {
 // Command to check latest results
 bot.command('results', async (ctx) => {
     try {
-        ctx.reply('🔍 Fetching latest exam results...');
-        
-        const latestResults = await getTop5Results(URLS.result, 'result');
-        
-        if (latestResults.length === 0) {
-            return ctx.reply('❌ Could not fetch results at the moment. Please try again later.');
-        }
-        
-        let message = `<b>🎓 Latest Exam Results</b>\n━━━━━━━━━━━━━━━\n\n`;
-        
-        latestResults.forEach((item, i) => {
-            const cleanedText = cleanText(item.text);
-            message += `${i + 1}. ${cleanedText}`;
-            if (item.date) {
-                message += `\n   📅 <i>${item.date}</i>`;
-            }
-            message += '\n\n';
-        });
-        
+        let message = `<b>🎓 Exam Results</b>\n━━━━━━━━━━━━━━━\n\n`;
         message += `🔗 <a href="${URLS.result}">View All Results</a>\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
@@ -500,25 +482,7 @@ bot.command('results', async (ctx) => {
 // Command to check latest datesheet
 bot.command('datesheet', async (ctx) => {
     try {
-        ctx.reply('🔍 Fetching latest datesheet...');
-        
-        const latestResults = await getTop5Results(URLS.datesheet, 'datesheet');
-        
-        if (latestResults.length === 0) {
-            return ctx.reply('❌ Could not fetch datesheet at the moment. Please try again later.');
-        }
-        
-        let message = `<b>📅 Latest Datesheets</b>\n━━━━━━━━━━━━━━━\n\n`;
-        
-        latestResults.forEach((item, i) => {
-            const cleanedText = cleanText(item.text);
-            message += `${i + 1}. ${cleanedText}`;
-            if (item.date) {
-                message += `\n   📅 <i>${item.date}</i>`;
-            }
-            message += '\n\n';
-        });
-        
+        let message = `<b>📅 Datesheets</b>\n━━━━━━━━━━━━━━━\n\n`;
         message += `🔗 <a href="${URLS.datesheet}">View All Datesheets</a>\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
@@ -538,25 +502,7 @@ bot.command('datesheet', async (ctx) => {
 // Command to check latest circulars
 bot.command('circular', async (ctx) => {
     try {
-        ctx.reply('🔍 Fetching latest circulars...');
-        
-        const latestResults = await getTop5Results(URLS.circular, 'circular');
-        
-        if (latestResults.length === 0) {
-            return ctx.reply('❌ Could not fetch circulars at the moment. Please try again later.');
-        }
-        
-        let message = `<b>📢 Latest Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n`;
-        
-        latestResults.forEach((item, i) => {
-            const cleanedText = cleanText(item.text);
-            message += `${i + 1}. ${cleanedText}`;
-            if (item.date) {
-                message += `\n   📅 <i>${item.date}</i>`;
-            }
-            message += '\n\n';
-        });
-        
+        let message = `<b>📢 Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n`;
         message += `🔗 <a href="${URLS.circular}">View All Circulars</a>\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
