@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/webhook",
+      "dest": "/api/webhook.js"
+    },
+    {
+      "src": "/api/check-updates",
+      "dest": "/api/check-updates.js"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/check-updates",
+      "schedule": "* * * * *"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": "@bot_token",
+    "MONGODB_URI": "@mongodb_uri",
+    "WEBHOOK_DOMAIN": "@webhook_domain"
+  }
+}
