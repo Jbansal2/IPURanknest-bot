@@ -22,6 +22,12 @@ const URLS = {
     circular: "http://ipu.ac.in/notices.php"
 };
 
+// Verify request is authorized
+function verifyRequest(req) {
+    const authHeader = req.headers['x-api-key'] || req.query.key;
+    return authHeader === process.env.API_KEY || authHeader === 'internal-cron-trigger';
+}
+
 async function getPageHash(url, type, retries = 2) {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -191,6 +197,11 @@ async function notifyUsers(bot, db, type, url) {
 
 module.exports = async (req, res) => {
     try {
+        // Verify authorization
+        if (!verifyRequest(req)) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        
         const db = await connectDB();
         const updatesCollection = db.collection('updates');
         const bot = new Telegraf(process.env.BOT_TOKEN);

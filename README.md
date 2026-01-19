@@ -35,6 +35,41 @@ Ek Telegram bot jo GGSIPU (Guru Gobind Singh Indraprastha University) ki website
 3. **Vercel Account**
    - [Vercel](https://vercel.com) pe account banao
 
+## 🌐 Vercel Deployment
+
+### Quick Deploy
+
+1. **Fork/Clone this repo**
+
+2. **Install Vercel CLI**
+```bash
+npm install -g vercel
+vercel login
+```
+
+3. **Deploy**
+```bash
+vercel
+```
+
+4. **Set Environment Variables** in Vercel Dashboard:
+   - `BOT_TOKEN` - Your Telegram bot token
+   - `MONGODB_URI` - MongoDB connection string
+   - `WEBHOOK_DOMAIN` - Your Vercel app URL
+   - `API_KEY` - Random secure key (generate with `openssl rand -hex 32`)
+
+5. **Set up External Cron**
+   - Sign up at https://cron-job.org (free)
+   - Create job: `https://your-app.vercel.app/api/updates?key=YOUR_API_KEY`
+   - Schedule: Every 1 minute
+
+6. **Set Telegram Webhook**
+```bash
+curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://your-app.vercel.app/api/webhook"
+```
+
+**Full deployment guide**: See [DEPLOYMENT.md](DEPLOYMENT.md)
+
 ## 🚀 Local Development Setup
 
 ### 1. Clone/Download the project

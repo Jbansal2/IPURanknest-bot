@@ -12,14 +12,16 @@
       "dest": "/api/webhook.js"
     },
     {
-      "src": "/api/check-updates",
+      "src": "/api/updates",
       "dest": "/api/check-updates.js"
-    }
-  ],
-  "crons": [
+    },
     {
-      "path": "/api/check-updates",
-      "schedule": "* * * * *"
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/health.js"
     }
   ],
   "env": {
