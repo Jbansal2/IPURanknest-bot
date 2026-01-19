@@ -44,7 +44,9 @@ async function getPageHash(url, type, retries = 2) {
             const response = await axios.get(url, {
                 timeout: 30000,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache'
                 },
                 validateStatus: function (status) {
                     return status < 500;
@@ -55,14 +57,32 @@ async function getPageHash(url, type, retries = 2) {
             
             let content = '';
             if (type === 'result') {
-                content = $('table, .result, #content').text().trim();
+                // Extract only table rows content, ignore timestamps/dates
+                $('table tr').each((i, row) => {
+                    const text = $(row).find('a').text().trim();
+                    if (text && text.length > 5) {
+                        content += text + '|';
+                    }
+                });
             } else if (type === 'datesheet') {
-                content = $('table, .datesheet, #content').text().trim();
+                $('table tr').each((i, row) => {
+                    const text = $(row).find('a').text().trim();
+                    if (text && text.length > 5) {
+                        content += text + '|';
+                    }
+                });
             } else if (type === 'circular') {
-                content = $('table, .notice, .circular, #content').text().trim();
+                $('table tr').each((i, row) => {
+                    const text = $(row).find('a').text().trim();
+                    if (text && text.length > 5) {
+                        content += text + '|';
+                    }
+                });
             }
             
-            const hash = Buffer.from(content).toString('base64').slice(0, 50);
+            // Use crypto for better hashing
+            const crypto = require('crypto');
+            const hash = crypto.createHash('md5').update(content).digest('hex');
             return { hash, content: content.slice(0, 500) };
         } catch (error) {
             if (attempt === retries) {
@@ -217,6 +237,7 @@ module.exports = async (req, res) => {
         const bot = new Telegraf(process.env.BOT_TOKEN);
         
         let changesDetected = [];
+        let checksPerformed = [];
         
         for (const [type, url] of Object.entries(URLS)) {
             const result = await getPageHash(url, type);
@@ -228,33 +249,40 @@ module.exports = async (req, res) => {
                 await updatesCollection.insertOne({
                     type,
                     hash: result.hash,
-                    lastChecked: new Date()
+                    lastChecked: new Date(),
+                    lastChanged: new Date()
                 });
+                checksPerformed.push({ type, status: 'initialized', hash: result.hash });
             } else if (lastUpdate.hash !== result.hash) {
+                console.log(`🔄 Change detected for ${type}! Old: ${lastUpdate.hash.slice(0, 8)}, New: ${result.hash.slice(0, 8)}`);
+                
                 await updatesCollection.updateOne(
                     { type },
                     { 
                         $set: { 
                             hash: result.hash, 
-                            lastChecked: new Date() 
+                            lastChecked: new Date(),
+                            lastChanged: new Date()
                         } 
                     }
                 );
                 
                 const notifiedCount = await notifyUsers(bot, db, type, url);
-                changesDetected.push({ type, notifiedUsers: notifiedCount });
+                changesDetected.push({ type, notifiedUsers: notifiedCount, newHash: result.hash });
             } else {
                 await updatesCollection.updateOne(
                     { type },
                     { $set: { lastChecked: new Date() } }
                 );
+                checksPerformed.push({ type, status: 'no_change', hash: result.hash });
             }
         }
         
         res.status(200).json({
             success: true,
             timestamp: new Date(),
-            changes: changesDetected
+            changes: changesDetected,
+            checks: checksPerformed
         });
     } catch (error) {
         console.error('Check updates error:', error);

@@ -459,6 +459,120 @@ bot.command('unsubscribe', async (ctx) => {
     ctx.reply('❌ You have been unsubscribed. Use /start to subscribe again.');
 });
 
+// Command to check latest results
+bot.command('results', async (ctx) => {
+    try {
+        ctx.reply('🔍 Fetching latest exam results...');
+        
+        const latestResults = await getTop5Results(URLS.result, 'result');
+        
+        if (latestResults.length === 0) {
+            return ctx.reply('❌ Could not fetch results at the moment. Please try again later.');
+        }
+        
+        let message = `<b>🎓 Latest Exam Results</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        latestResults.forEach((item, i) => {
+            const cleanedText = cleanText(item.text);
+            message += `${i + 1}. ${cleanedText}`;
+            if (item.date) {
+                message += `\n   📅 <i>${item.date}</i>`;
+            }
+            message += '\n\n';
+        });
+        
+        message += `🔗 <a href="${URLS.result}">View All Results</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        await logEvent('manual_check', {
+            chatId: ctx.chat.id,
+            username: ctx.from.username,
+            type: 'results'
+        });
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /results command:', error);
+        ctx.reply('❌ An error occurred while fetching results.');
+    }
+});
+
+// Command to check latest datesheet
+bot.command('datesheet', async (ctx) => {
+    try {
+        ctx.reply('🔍 Fetching latest datesheet...');
+        
+        const latestResults = await getTop5Results(URLS.datesheet, 'datesheet');
+        
+        if (latestResults.length === 0) {
+            return ctx.reply('❌ Could not fetch datesheet at the moment. Please try again later.');
+        }
+        
+        let message = `<b>📅 Latest Datesheets</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        latestResults.forEach((item, i) => {
+            const cleanedText = cleanText(item.text);
+            message += `${i + 1}. ${cleanedText}`;
+            if (item.date) {
+                message += `\n   📅 <i>${item.date}</i>`;
+            }
+            message += '\n\n';
+        });
+        
+        message += `🔗 <a href="${URLS.datesheet}">View All Datesheets</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        await logEvent('manual_check', {
+            chatId: ctx.chat.id,
+            username: ctx.from.username,
+            type: 'datesheet'
+        });
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /datesheet command:', error);
+        ctx.reply('❌ An error occurred while fetching datesheet.');
+    }
+});
+
+// Command to check latest circulars
+bot.command('circular', async (ctx) => {
+    try {
+        ctx.reply('🔍 Fetching latest circulars...');
+        
+        const latestResults = await getTop5Results(URLS.circular, 'circular');
+        
+        if (latestResults.length === 0) {
+            return ctx.reply('❌ Could not fetch circulars at the moment. Please try again later.');
+        }
+        
+        let message = `<b>📢 Latest Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        latestResults.forEach((item, i) => {
+            const cleanedText = cleanText(item.text);
+            message += `${i + 1}. ${cleanedText}`;
+            if (item.date) {
+                message += `\n   📅 <i>${item.date}</i>`;
+            }
+            message += '\n\n';
+        });
+        
+        message += `🔗 <a href="${URLS.circular}">View All Circulars</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        await logEvent('manual_check', {
+            chatId: ctx.chat.id,
+            username: ctx.from.username,
+            type: 'circular'
+        });
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /circular command:', error);
+        ctx.reply('❌ An error occurred while fetching circulars.');
+    }
+});
+
 // Handle callback queries for notification preferences
 bot.action(/toggle_(.+)/, async (ctx) => {
     const type = ctx.match[1]; // results, datesheet, or circular
