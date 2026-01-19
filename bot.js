@@ -53,7 +53,9 @@ async function getPageHash(url, type, retries = 2) {
             const response = await axios.get(url, {
                 timeout: 30000,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache'
                 },
                 validateStatus: function (status) {
                     return status < 500; // Accept any status < 500
@@ -62,18 +64,39 @@ async function getPageHash(url, type, retries = 2) {
             
             const $ = cheerio.load(response.data);
             
-            // Extract relevant content based on type
-            let content = '';
+            let titles = [];
             if (type === 'result') {
-                content = $('table, .result, #content').text().trim();
+                // Extract only top 10 link titles (normalized)
+                $('table tr').each((i, row) => {
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
+                    }
+                });
             } else if (type === 'datesheet') {
-                content = $('table, .datesheet, #content').text().trim();
+                $('table tr').each((i, row) => {
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
+                    }
+                });
             } else if (type === 'circular') {
-                content = $('table, .notice, .circular, #content').text().trim();
+                $('table tr').each((i, row) => {
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
+                    }
+                });
             }
             
-            // Create simple hash
-            const hash = Buffer.from(content).toString('base64').slice(0, 50);
+            // Use crypto for better hashing - join titles with separator
+            const crypto = require('crypto');
+            const content = titles.join('||');
+            const hash = crypto.createHash('md5').update(content).digest('hex');
+            console.log(`[${type}] Extracted ${titles.length} titles, Hash: ${hash.slice(0, 12)}`);
             return { hash, content: content.slice(0, 500) };
         } catch (error) {
             if (attempt === retries) {
