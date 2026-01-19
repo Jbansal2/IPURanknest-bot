@@ -23,10 +23,5 @@
       "src": "/(.*)",
       "dest": "/api/health.js"
     }
-  ],
-  "env": {
-    "BOT_TOKEN": "@bot_token",
-    "MONGODB_URI": "@mongodb_uri",
-    "WEBHOOK_DOMAIN": "@webhook_domain"
-  }
+  ]
 }
