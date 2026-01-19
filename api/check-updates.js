@@ -55,34 +55,40 @@ async function getPageHash(url, type, retries = 2) {
             
             const $ = cheerio.load(response.data);
             
-            let content = '';
+            let titles = [];
             if (type === 'result') {
-                // Extract only table rows content, ignore timestamps/dates
+                // Extract only top 10 link titles (normalized)
                 $('table tr').each((i, row) => {
-                    const text = $(row).find('a').text().trim();
-                    if (text && text.length > 5) {
-                        content += text + '|';
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
                     }
                 });
             } else if (type === 'datesheet') {
                 $('table tr').each((i, row) => {
-                    const text = $(row).find('a').text().trim();
-                    if (text && text.length > 5) {
-                        content += text + '|';
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
                     }
                 });
             } else if (type === 'circular') {
                 $('table tr').each((i, row) => {
-                    const text = $(row).find('a').text().trim();
-                    if (text && text.length > 5) {
-                        content += text + '|';
+                    if (titles.length >= 10) return false;
+                    const text = $(row).find('a').first().text().trim().replace(/\s+/g, ' ');
+                    if (text && text.length > 10 && !text.toLowerCase().includes('s.no') && !text.toLowerCase().includes('title')) {
+                        titles.push(text);
                     }
                 });
             }
             
-            // Use crypto for better hashing
+            // Use crypto for better hashing - join titles with separator
             const crypto = require('crypto');
+            const content = titles.join('||');
             const hash = crypto.createHash('md5').update(content).digest('hex');
+            console.log(`[${type}] Extracted ${titles.length} titles, Hash: ${hash.slice(0, 12)}`);
+            return { hash, content: content.slice(0, 500) };
             return { hash, content: content.slice(0, 500) };
         } catch (error) {
             if (attempt === retries) {

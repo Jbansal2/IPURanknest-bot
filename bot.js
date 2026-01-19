@@ -614,8 +614,8 @@ async function main() {
         // Production: Check every 1 minute (Vercel limitation)
         cron.schedule('* * * * *', checkForUpdates);
     } else {
-        // Development: Check every 10 seconds (avoid overwhelming servers)
-        setInterval(checkForUpdates, 10000);
+        // Development: Check every 5 minutes to avoid spam
+        setInterval(checkForUpdates, 1 * 60 * 1000); // 5 minutes
     }
     
     // Initial check
