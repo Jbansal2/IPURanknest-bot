@@ -584,6 +584,7 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // Export for Vercel
 module.exports = bot;
+module.exports.connectDB = connectDB;
 
 // Start if running directly
 if (require.main === module) {
