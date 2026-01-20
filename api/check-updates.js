@@ -188,7 +188,21 @@ async function notifyUsers(bot, db, type, url) {
     };
     
     let message = `<b>${icons[type]} ${titles[type]}</b>\n━━━━━━━━━━━━━━━\n\n`;
-    message += `🔔 New update detected!\n\n`;
+    
+    if (latestResults.length > 0) {
+        message += '<b>📋 Latest Updates:</b>\n\n';
+        latestResults.slice(0, 3).forEach((item, i) => {
+            const cleanedText = cleanText(item.text);
+            message += `${i + 1}. ${cleanedText}`;
+            if (item.date) {
+                message += `\n   📅 <i>${item.date}</i>`;
+            }
+            message += '\n\n';
+        });
+    } else {
+        message += `🔔 New update detected!\n\n`;
+    }
+    
     message += `🔗 <a href="${url}">View All Updates</a>\n\n`;
     message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
     
