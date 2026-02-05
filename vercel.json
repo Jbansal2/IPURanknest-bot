@@ -9,19 +9,19 @@
   "routes": [
     {
       "src": "/api/webhook",
-      "dest": "/api/webhook.js"
+      "dest": "api/webhook.js"
     },
     {
       "src": "/api/updates",
-      "dest": "/api/check-updates.js"
+      "dest": "api/check-updates.js"
     },
     {
       "src": "/api/health",
-      "dest": "/api/health.js"
+      "dest": "api/health.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/api/health.js"
+      "dest": "api/health.js"
     }
   ]
 }
