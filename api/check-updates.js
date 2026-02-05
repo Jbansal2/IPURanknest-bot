@@ -11,7 +11,7 @@ async function connectDB() {
         return cachedDb;
     }
     
-    const client = await MongoClient.connect(process.env.MONGODB_URI, {
+    const client = new MongoClient(process.env.MONGODB_URI, {
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
         tls: true,
@@ -20,6 +20,7 @@ async function connectDB() {
         retryReads: true,
         maxPoolSize: 1,
     });
+    await client.connect();
     cachedClient = client;
     const db = client.db('ipu_bot');
     cachedDb = db;

@@ -11,12 +11,11 @@ async function connectDB() {
     if (db) return db;
     
     try {
-        const client = await MongoClient.connect(process.env.MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
+        const client = new MongoClient(process.env.MONGODB_URI, {
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000
         });
+        await client.connect();
         db = client.db('ipu_bot');
         usersCollection = db.collection('users');
         logsCollection = db.collection('logs');
