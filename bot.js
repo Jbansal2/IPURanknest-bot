@@ -482,6 +482,65 @@ bot.command('unsubscribe', async (ctx) => {
     ctx.reply('❌ You have been unsubscribed. Use /start to subscribe again.');
 });
 
+// Command to subscribe/resubscribe
+bot.command('subscribe', async (ctx) => {
+    try {
+        const chatId = ctx.chat.id;
+        const user = await usersCollection.findOne({ chatId });
+
+        if (!user) {
+            await usersCollection.insertOne({
+                chatId,
+                username: ctx.from.username,
+                firstName: ctx.from.first_name,
+                active: true,
+                subscribedAt: new Date(),
+                preferences: {
+                    results: true,
+                    datesheet: true,
+                    circular: true
+                }
+            });
+            await logEvent('user_subscribed', { chatId, username: ctx.from.username, status: 'subscribed_via_command' });
+        } else {
+            await usersCollection.updateOne({ chatId }, { $set: { active: true } });
+            await logEvent('user_resubscribed', { chatId, username: ctx.from.username, status: 'resubscribed_via_command' });
+        }
+
+        ctx.reply('✅ You are now subscribed. Use /status to view preferences or /unsubscribe to stop.');
+    } catch (error) {
+        console.error('Error in /subscribe command:', error);
+        ctx.reply('❌ An error occurred while subscribing.');
+    }
+});
+
+// Command to show current subscription status and preferences
+bot.command('status', async (ctx) => {
+    try {
+        const chatId = ctx.chat.id;
+        const user = await usersCollection.findOne({ chatId });
+
+        if (!user) {
+            return ctx.reply('⚠️ You are not subscribed. Use /start to subscribe.');
+        }
+
+        const prefs = user.preferences || { results: true, datesheet: true, circular: true };
+        const lines = [
+            `${user.active ? '✅ Subscribed' : '❌ Unsubscribed'}`,
+            '',
+            `Preferences:`,
+            `${prefs.results ? '✅' : '❌'} Exam Results`,
+            `${prefs.datesheet ? '✅' : '❌'} Datesheets`,
+            `${prefs.circular ? '✅' : '❌'} Circulars/Notices`
+        ];
+
+        ctx.reply(lines.join('\n'));
+    } catch (error) {
+        console.error('Error in /status command:', error);
+        ctx.reply('❌ Could not retrieve status.');
+    }
+});
+
 // Command to check latest results
 bot.command('results', async (ctx) => {
     try {

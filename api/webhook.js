@@ -1,23 +1,347 @@
-const bot = require('../bot');
+const { Telegraf } = require('telegraf');
+const { MongoClient } = require('mongodb');
 
-let dbConnected = false;
+const bot = new Telegraf(process.env.BOT_TOKEN);
+let db;
+let usersCollection;
+let logsCollection;
+
+// MongoDB Connection with caching
+async function connectDB() {
+    if (db) return db;
+    
+    try {
+        const client = await MongoClient.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000
+        });
+        db = client.db('ipu_bot');
+        usersCollection = db.collection('users');
+        logsCollection = db.collection('logs');
+        console.log('✅ MongoDB Connected (webhook)');
+        return db;
+    } catch (error) {
+        console.error('❌ MongoDB Connection Error:', error);
+        throw error;
+    }
+}
+
+// Log events
+async function logEvent(type, data) {
+    try {
+        if (!logsCollection) await connectDB();
+        await logsCollection.insertOne({
+            type,
+            data,
+            timestamp: new Date(),
+            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+        });
+    } catch (error) {
+        console.error('Logging error:', error);
+    }
+}
+
+// URLs
+const URLS = {
+    result: "http://ggsipu.ac.in/ExamResults/ExamResultsmain.htm",
+    datesheet: "http://ipu.ac.in/exam_datesheet.php",
+    circular: "http://ipu.ac.in/notices.php"
+};
+
+// ========== BOT COMMANDS ==========
+
+bot.start(async (ctx) => {
+    try {
+        await connectDB();
+        
+        const chatId = ctx.chat.id;
+        const user = await usersCollection.findOne({ chatId });
+        
+        if (!user) {
+            // New user
+            await usersCollection.insertOne({
+                chatId,
+                username: ctx.from.username || 'Anonymous',
+                firstName: ctx.from.first_name || 'User',
+                active: true,
+                subscribedAt: new Date(),
+                preferences: {
+                    results: true,
+                    datesheet: true,
+                    circular: true
+                }
+            });
+            
+            await logEvent('user_subscribed', {
+                chatId,
+                username: ctx.from.username,
+                firstName: ctx.from.first_name,
+                status: 'new_user'
+            });
+            
+            console.log('✅ New user added:', chatId);
+        } else {
+            // Existing user - reactivate
+            await usersCollection.updateOne(
+                { chatId },
+                { 
+                    $set: { active: true },
+                    $setOnInsert: {
+                        preferences: {
+                            results: true,
+                            datesheet: true,
+                            circular: true
+                        }
+                    }
+                }
+            );
+            
+            await logEvent('user_resubscribed', {
+                chatId,
+                username: ctx.from.username,
+                status: 'returning_user'
+            });
+            
+            console.log('✅ User reactivated:', chatId);
+        }
+        
+        // Get current preferences
+        const currentUser = await usersCollection.findOne({ chatId });
+        const prefs = currentUser.preferences || { results: true, datesheet: true, circular: true };
+        
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    { 
+                        text: `${prefs.results ? '✅' : '❌'} Exam Results`, 
+                        callback_data: 'toggle_results' 
+                    }
+                ],
+                [
+                    { 
+                        text: `${prefs.datesheet ? '✅' : '❌'} Datesheets`, 
+                        callback_data: 'toggle_datesheet' 
+                    }
+                ],
+                [
+                    { 
+                        text: `${prefs.circular ? '✅' : '❌'} Circulars/Notices`, 
+                        callback_data: 'toggle_circular' 
+                    }
+                ]
+            ]
+        };
+        
+        await ctx.reply(
+            `✨ Welcome to IPU Updates Bot!\n\n` +
+            `Choose which notifications you want to receive:\n\n` +
+            `Tap on any option below to enable/disable:`,
+            { reply_markup: keyboard }
+        );
+        
+    } catch (error) {
+        console.error('❌ Start command error:', error);
+        await ctx.reply('Sorry, something went wrong. Please try /start again.');
+    }
+});
+
+bot.command('unsubscribe', async (ctx) => {
+    try {
+        await connectDB();
+        
+        await usersCollection.updateOne(
+            { chatId: ctx.chat.id },
+            { $set: { active: false } }
+        );
+        
+        await logEvent('user_unsubscribed', {
+            chatId: ctx.chat.id,
+            username: ctx.from.username
+        });
+        
+        ctx.reply('❌ You have been unsubscribed. Use /start to subscribe again.');
+    } catch (error) {
+        console.error('Unsubscribe error:', error);
+        ctx.reply('Error processing your request.');
+    }
+});
+
+bot.command('status', async (ctx) => {
+    try {
+        await connectDB();
+        
+        const totalUsers = await usersCollection.countDocuments({ active: true });
+        const user = await usersCollection.findOne({ chatId: ctx.chat.id });
+        
+        let message = `📊 <b>Bot Status</b>\n━━━━━━━━━━━━━━━\n\n`;
+        message += `👥 Active Users: ${totalUsers}\n`;
+        message += `✅ Your Status: ${user?.active ? 'Subscribed' : 'Not Subscribed'}\n\n`;
+        message += `🔗 Monitoring:\n`;
+        message += `• 🎓 Exam Results\n`;
+        message += `• 📅 Datesheets\n`;
+        message += `• 📢 Circulars\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Status error:', error);
+        ctx.reply('Error fetching status.');
+    }
+});
+
+bot.command('help', async (ctx) => {
+    const message = `
+🤖 <b>IPU Updates Bot - Help</b>
+━━━━━━━━━━━━━━━
+
+<b>Available Commands:</b>
+
+/start - Subscribe to updates
+/status - Check bot status
+/results - View results page
+/datesheet - View datesheet page
+/circular - View circulars page
+/unsubscribe - Stop notifications
+/help - Show this message
+
+<b>Features:</b>
+• Instant notifications for new updates
+• Customize notification preferences
+• Monitor multiple IPU websites
+
+For support, contact: @YourUsername
+`;
+    
+    ctx.reply(message, { parse_mode: 'HTML' });
+});
+
+bot.command('results', async (ctx) => {
+    const message = `<b>🎓 Exam Results</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.result}">View All Results</a>`;
+    ctx.reply(message, { parse_mode: 'HTML' });
+});
+
+bot.command('datesheet', async (ctx) => {
+    const message = `<b>📅 Datesheets</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.datesheet}">View All Datesheets</a>`;
+    ctx.reply(message, { parse_mode: 'HTML' });
+});
+
+bot.command('circular', async (ctx) => {
+    const message = `<b>📢 Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.circular}">View All Circulars</a>`;
+    ctx.reply(message, { parse_mode: 'HTML' });
+});
+
+// Handle callback queries for toggle buttons
+bot.action(/toggle_(.+)/, async (ctx) => {
+    try {
+        await connectDB();
+        
+        const type = ctx.match[1]; // results, datesheet, or circular
+        const chatId = ctx.chat.id;
+        
+        const user = await usersCollection.findOne({ chatId });
+        const currentPrefs = user.preferences || { results: true, datesheet: true, circular: true };
+        
+        // Toggle preference
+        currentPrefs[type] = !currentPrefs[type];
+        
+        await usersCollection.updateOne(
+            { chatId },
+            { $set: { preferences: currentPrefs } }
+        );
+        
+        await logEvent('preference_changed', {
+            chatId,
+            username: ctx.from.username,
+            type,
+            newValue: currentPrefs[type]
+        });
+        
+        // Update keyboard
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    { 
+                        text: `${currentPrefs.results ? '✅' : '❌'} Exam Results`, 
+                        callback_data: 'toggle_results' 
+                    }
+                ],
+                [
+                    { 
+                        text: `${currentPrefs.datesheet ? '✅' : '❌'} Datesheets`, 
+                        callback_data: 'toggle_datesheet' 
+                    }
+                ],
+                [
+                    { 
+                        text: `${currentPrefs.circular ? '✅' : '❌'} Circulars/Notices`, 
+                        callback_data: 'toggle_circular' 
+                    }
+                ]
+            ]
+        };
+        
+        const enabledTypes = [];
+        if (currentPrefs.results) enabledTypes.push('🎓 Results');
+        if (currentPrefs.datesheet) enabledTypes.push('📅 Datesheets');
+        if (currentPrefs.circular) enabledTypes.push('📢 Circulars');
+        
+        const statusText = enabledTypes.length > 0 
+            ? `\n\n✅ You'll receive: ${enabledTypes.join(', ')}`
+            : `\n\n⚠️ No notifications enabled!`;
+        
+        await ctx.editMessageText(
+            `✨ Welcome to IPU Updates Bot!\n\n` +
+            `Choose which notifications you want to receive:\n\n` +
+            `Tap on any option below to enable/disable:` +
+            statusText,
+            { reply_markup: keyboard }
+        );
+        
+        await ctx.answerCbQuery('✅ Updated!');
+    } catch (error) {
+        console.error('Toggle error:', error);
+        await ctx.answerCbQuery('Error updating preferences');
+    }
+});
+
+// Error handling
+bot.catch(async (err, ctx) => {
+    console.error('Bot Error:', err);
+    
+    try {
+        await logEvent('bot_error', {
+            error: err.message,
+            userId: ctx?.from?.id
+        });
+    } catch (logError) {
+        console.error('Error logging failed:', logError);
+    }
+});
+
+// ========== VERCEL SERVERLESS HANDLER ==========
 
 module.exports = async (req, res) => {
     try {
-        // Ensure MongoDB connection on first request
-        if (!dbConnected) {
-            await bot.connectDB();
-            dbConnected = true;
-        }
-
+        // Ensure DB connection
+        await connectDB();
+        
         if (req.method === 'POST') {
+            // Handle incoming Telegram updates
             await bot.handleUpdate(req.body);
-            res.status(200).json({ ok: true });
+            return res.status(200).json({ ok: true });
+        } else if (req.method === 'GET') {
+            // Health check
+            return res.status(200).json({ 
+                status: 'Bot is running',
+                timestamp: new Date().toISOString()
+            });
         } else {
-            res.status(200).json({ status: 'Bot is running' });
+            return res.status(405).json({ error: 'Method not allowed' });
         }
     } catch (error) {
-        console.error('Webhook error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('❌ Webhook error:', error);
+        return res.status(500).json({ error: 'Internal server error', message: error.message });
     }
 };
