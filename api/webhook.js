@@ -5,6 +5,28 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 let db;
 let usersCollection;
 let logsCollection;
+let processedUpdatesCollection;
+
+// Register bot commands so they appear in Telegram UI
+async function registerCommands() {
+    try {
+        await bot.telegram.setMyCommands([
+            { command: 'start', description: 'Subscribe / show menu' },
+            { command: 'status', description: 'Show bot status' },
+            { command: 'help', description: 'Show help' },
+            { command: 'unsubscribe', description: 'Unsubscribe' },
+            { command: 'results', description: 'View results' },
+            { command: 'datesheet', description: 'View datesheet' },
+            { command: 'circular', description: 'View circulars' }
+        ]);
+        console.log('✅ Bot commands registered');
+    } catch (e) {
+        console.warn('Failed to register commands:', e.message);
+    }
+}
+
+// Try to register commands on cold start
+registerCommands();
 
 // MongoDB Connection with caching
 async function connectDB() {
@@ -19,6 +41,7 @@ async function connectDB() {
         db = client.db('ipu_bot');
         usersCollection = db.collection('users');
         logsCollection = db.collection('logs');
+        processedUpdatesCollection = db.collection('processed_updates');
         console.log('✅ MongoDB Connected (webhook)');
         return db;
     } catch (error) {
@@ -325,10 +348,20 @@ module.exports = async (req, res) => {
     try {
         // Ensure DB connection
         await connectDB();
+        // Idempotency: check already-processed Telegram update_id
+        const updateId = req.body && (req.body.update_id || req.body.update?.update_id);
+        if (updateId) {
+            const seen = await processedUpdatesCollection.findOne({ update_id: updateId });
+            if (seen) return res.status(200).json({ ok: true, skipped: true });
+        }
         
         if (req.method === 'POST') {
             // Handle incoming Telegram updates
             await bot.handleUpdate(req.body);
+            // mark update as processed (best-effort)
+            if (updateId) {
+                try { await processedUpdatesCollection.insertOne({ update_id: updateId, receivedAt: new Date() }); } catch (e) {}
+            }
             return res.status(200).json({ ok: true });
         } else if (req.method === 'GET') {
             // Health check
