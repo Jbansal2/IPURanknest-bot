@@ -156,12 +156,20 @@ bot.start(async (ctx) => {
             ]
         };
         
-        await ctx.reply(
+        const welcomeText =
             `✨ Welcome to IPU Updates Bot!\n\n` +
             `Choose which notifications you want to receive:\n\n` +
-            `Tap on any option below to enable/disable:`,
-            { reply_markup: keyboard }
-        );
+            `Tap on any option below to enable/disable:\n\n` +
+            `📚 Commands:\n` +
+            `/start - Show this menu\n` +
+            `/status - Check your subscription status\n` +
+            `/results - View exam results page\n` +
+            `/datesheet - View datesheet page\n` +
+            `/circular - View circulars/notices\n` +
+            `/unsubscribe - Stop notifications\n` +
+            `/help - Show help and commands`;
+
+        await ctx.reply(welcomeText, { reply_markup: keyboard });
         
     } catch (error) {
         console.error('❌ Start command error:', error);
