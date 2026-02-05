@@ -320,11 +320,9 @@ bot.command('status', async (ctx) => {
         console.log('Received /status from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
         await connectDB();
         
-        const totalUsers = await usersCollection.countDocuments({ active: true });
         const user = await usersCollection.findOne({ chatId: ctx.chat.id });
         
         let message = `📊 <b>Bot Status</b>\n━━━━━━━━━━━━━━━\n\n`;
-        message += `👥 Active Users: ${totalUsers}\n`;
         message += `✅ Your Status: ${user?.active ? 'Subscribed' : 'Not Subscribed'}\n\n`;
         message += `🔗 Monitoring:\n`;
         message += `• 🎓 Exam Results\n`;
