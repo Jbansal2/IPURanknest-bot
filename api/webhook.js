@@ -171,6 +171,7 @@ bot.start(async (ctx) => {
 
 bot.command('unsubscribe', async (ctx) => {
     try {
+        console.log('Received /unsubscribe from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
         await connectDB();
         
         await usersCollection.updateOne(
@@ -192,6 +193,7 @@ bot.command('unsubscribe', async (ctx) => {
 
 bot.command('status', async (ctx) => {
     try {
+        console.log('Received /status from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
         await connectDB();
         
         const totalUsers = await usersCollection.countDocuments({ active: true });
@@ -214,6 +216,7 @@ bot.command('status', async (ctx) => {
 });
 
 bot.command('help', async (ctx) => {
+    console.log('Received /help from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
     const message = `
 🤖 <b>IPU Updates Bot - Help</b>
 ━━━━━━━━━━━━━━━
@@ -240,18 +243,35 @@ For support, contact: @YourUsername
 });
 
 bot.command('results', async (ctx) => {
+    console.log('Received /results from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
     const message = `<b>🎓 Exam Results</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.result}">View All Results</a>`;
     ctx.reply(message, { parse_mode: 'HTML' });
 });
 
 bot.command('datesheet', async (ctx) => {
+    console.log('Received /datesheet from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
     const message = `<b>📅 Datesheets</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.datesheet}">View All Datesheets</a>`;
     ctx.reply(message, { parse_mode: 'HTML' });
 });
 
 bot.command('circular', async (ctx) => {
+    console.log('Received /circular from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
     const message = `<b>📢 Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.circular}">View All Circulars</a>`;
     ctx.reply(message, { parse_mode: 'HTML' });
+});
+
+// Generic logger for incoming messages to help debug command routing
+bot.on('message', (ctx) => {
+    try {
+        console.log('Incoming message:', {
+            from: ctx.from && { id: ctx.from.id, username: ctx.from.username },
+            chatId: ctx.chat && ctx.chat.id,
+            text: ctx.message && ctx.message.text,
+            updateType: ctx.updateType
+        });
+    } catch (e) {
+        console.error('Message logger error:', e.message);
+    }
 });
 
 // Handle callback queries for toggle buttons
