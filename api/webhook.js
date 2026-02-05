@@ -65,12 +65,121 @@ async function logEvent(type, data) {
     }
 }
 
-// URLs
-const URLS = {
-    result: "http://ggsipu.ac.in/ExamResults/ExamResultsmain.htm",
-    datesheet: "http://ipu.ac.in/exam_datesheet.php",
-    circular: "http://ipu.ac.in/notices.php"
-};
+// Clean and escape text for Telegram messages (HTML mode)
+function cleanText(text) {
+    return text
+        .replace(/\s+/g, ' ')  // Replace multiple spaces/tabs/newlines with single space
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .trim()
+        .slice(0, 200);  // Limit length
+}
+
+// Fetch top 5 results from a webpage
+async function getTop5Results(url, type) {
+    try {
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        
+        const response = await axios.get(url, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            validateStatus: function (status) {
+                return status < 500;
+            }
+        });
+        
+        const $ = cheerio.load(response.data);
+        const results = [];
+        
+        // Extract top 5 items based on type
+        if (type === 'result') {
+            // Look for result links in table rows
+            $('table tr').each((i, row) => {
+                if (results.length >= 10) return false;
+                
+                const $row = $(row);
+                const link = $row.find('a').first();
+                
+                if (link.length > 0) {
+                    const title = link.text().trim();
+                    const href = link.attr('href') || '';
+                    const date = $row.find('td').last().text().trim();
+                    
+                    if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
+                        results.push({ 
+                            text: title,
+                            link: href,
+                            date: date
+                        });
+                    }
+                }
+            });
+        } else if (type === 'datesheet') {
+            // Look for datesheet links
+            $('table tr').each((i, row) => {
+                if (results.length >= 10) return false;
+                
+                const $row = $(row);
+                const link = $row.find('a').first();
+                
+                if (link.length > 0) {
+                    const title = link.text().trim();
+                    const href = link.attr('href') || '';
+                    const date = $row.find('td').last().text().trim();
+                    
+                    if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
+                        results.push({ 
+                            text: title,
+                            link: href,
+                            date: date
+                        });
+                    }
+                }
+            });
+        } else if (type === 'circular') {
+            // Look for circular/notice links in table
+            $('table tr').each((i, row) => {
+                if (results.length >= 10) return false;
+                
+                const $row = $(row);
+                const link = $row.find('a').first();
+                
+                if (link.length > 0) {
+                    const title = link.text().trim();
+                    const href = link.attr('href') || '';
+                    
+                    // Get date from last td
+                    const dateTd = $row.find('td').last().text().trim();
+                    
+                    // Filter out header rows and navigation items
+                    if (title && 
+                        title.length > 5 && 
+                        !title.toLowerCase().includes('title') && 
+                        !title.toLowerCase().includes('notices') &&
+                        !title.toLowerCase().includes('about university') &&
+                        !title.toLowerCase().includes('acts, statute') &&
+                        !title.toLowerCase().includes('university...') &&
+                        dateTd.match(/\d{2}-\d{2}-\d{4}/)) {  // Must have date format
+                        results.push({ 
+                            text: title,
+                            link: href,
+                            date: dateTd
+                        });
+                    }
+                }
+            });
+        }
+        
+        return results.slice(0, 10);
+    } catch (error) {
+        console.error(`Error fetching top results for ${type}:`, error.message);
+        return [];
+    }
+}
 
 // ========== BOT COMMANDS ==========
 
@@ -252,20 +361,95 @@ For support, contact: @YourUsername
 
 bot.command('results', async (ctx) => {
     console.log('Received /results from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
-    const message = `<b>🎓 Exam Results</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.result}">View All Results</a>`;
-    ctx.reply(message, { parse_mode: 'HTML' });
+    try {
+        const topResults = await getTop5Results(URLS.result, 'result');
+        
+        let message = `<b>🎓 Latest Exam Results</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        if (topResults.length > 0) {
+            message += '<b>📋 Top Results:</b>\n\n';
+            topResults.forEach((item, i) => {
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}`;
+                if (item.date) {
+                    message += `\n   📅 <i>${item.date}</i>`;
+                }
+                message += '\n\n';
+            });
+        } else {
+            message += '❌ Unable to fetch results at the moment.\n\n';
+        }
+        
+        message += `🔗 <a href="${URLS.result}">View All Results</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /results command:', error);
+        ctx.reply('❌ An error occurred while fetching results.');
+    }
 });
 
 bot.command('datesheet', async (ctx) => {
     console.log('Received /datesheet from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
-    const message = `<b>📅 Datesheets</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.datesheet}">View All Datesheets</a>`;
-    ctx.reply(message, { parse_mode: 'HTML' });
+    try {
+        const topResults = await getTop5Results(URLS.datesheet, 'datesheet');
+        
+        let message = `<b>📅 Latest Datesheets</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        if (topResults.length > 0) {
+            message += '<b>📋 Top Datesheets:</b>\n\n';
+            topResults.forEach((item, i) => {
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}`;
+                if (item.date) {
+                    message += `\n   📅 <i>${item.date}</i>`;
+                }
+                message += '\n\n';
+            });
+        } else {
+            message += '❌ Unable to fetch datesheets at the moment.\n\n';
+        }
+        
+        message += `🔗 <a href="${URLS.datesheet}">View All Datesheets</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /datesheet command:', error);
+        ctx.reply('❌ An error occurred while fetching datesheets.');
+    }
 });
 
 bot.command('circular', async (ctx) => {
     console.log('Received /circular from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
-    const message = `<b>📢 Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n🔗 <a href="${URLS.circular}">View All Circulars</a>`;
-    ctx.reply(message, { parse_mode: 'HTML' });
+    try {
+        const topResults = await getTop5Results(URLS.circular, 'circular');
+        
+        let message = `<b>📢 Latest Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n`;
+        
+        if (topResults.length > 0) {
+            message += '<b>📋 Top Circulars:</b>\n\n';
+            topResults.forEach((item, i) => {
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}`;
+                if (item.date) {
+                    message += `\n   📅 <i>${item.date}</i>`;
+                }
+                message += '\n\n';
+            });
+        } else {
+            message += '❌ Unable to fetch circulars at the moment.\n\n';
+        }
+        
+        message += `🔗 <a href="${URLS.circular}">View All Circulars</a>\n\n`;
+        message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
+        
+        ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('Error in /circular command:', error);
+        ctx.reply('❌ An error occurred while fetching circulars.');
+    }
 });
 
 // Generic logger for incoming messages to help debug command routing
