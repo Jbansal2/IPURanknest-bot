@@ -76,6 +76,13 @@ function cleanText(text) {
         .slice(0, 200);  // Limit length
 }
 
+// URLs
+const URLS = {
+    result: "http://ggsipu.ac.in/ExamResults/ExamResultsmain.htm",
+    datesheet: "http://ipu.ac.in/exam_datesheet.php",
+    circular: "http://ipu.ac.in/notices.php"
+};
+
 // Fetch top 5 results from a webpage
 async function getTop5Results(url, type) {
     try {
