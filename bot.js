@@ -469,22 +469,31 @@ bot.start(async (ctx) => {
 });
 
 bot.command('unsubscribe', async (ctx) => {
+    if (!usersCollection) {
+        console.warn('DB not connected when handling /unsubscribe');
+        return ctx.reply('⚠️ Service temporarily unavailable (no DB). Try again later.');
+    }
+
     await usersCollection.updateOne(
         { chatId: ctx.chat.id },
         { $set: { active: false } }
     );
-    
+
     await logEvent('user_unsubscribed', {
         chatId: ctx.chat.id,
         username: ctx.from.username
     });
-    
+
     ctx.reply('❌ You have been unsubscribed. Use /start to subscribe again.');
 });
 
 // Command to subscribe/resubscribe
 bot.command('subscribe', async (ctx) => {
     try {
+        if (!usersCollection) {
+            console.warn('DB not connected when handling /subscribe');
+            return ctx.reply('⚠️ Service temporarily unavailable (no DB). Try again later.');
+        }
         const chatId = ctx.chat.id;
         const user = await usersCollection.findOne({ chatId });
 
@@ -517,6 +526,10 @@ bot.command('subscribe', async (ctx) => {
 // Command to show current subscription status and preferences
 bot.command('status', async (ctx) => {
     try {
+        if (!usersCollection) {
+            console.warn('DB not connected when handling /status');
+            return ctx.reply('⚠️ Service temporarily unavailable (no DB). Try again later.');
+        }
         const chatId = ctx.chat.id;
         const user = await usersCollection.findOne({ chatId });
 
