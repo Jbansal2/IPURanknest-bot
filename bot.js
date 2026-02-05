@@ -465,7 +465,7 @@ bot.start(async (ctx) => {
     };
     
     ctx.reply(
-        `✨ Welcome to IPU Updates Bot!\n\n` +
+        `✨ Welcome to IPU Ranknest Bot!\n\n` +
         `Choose which notifications you want to receive:\n\n` +
         `Tap on any option below to enable/disable:\n`,
         { reply_markup: keyboard }
@@ -681,7 +681,7 @@ bot.action(/toggle_(.+)/, async (ctx) => {
         : `\n\n⚠️ No notifications enabled. Enable at least one!`;
     
     await ctx.editMessageText(
-        `✨ Welcome to IPU Updates Bot!\n\n` +
+        `✨ Welcome to IPU Ranknest Bot!\n\n` +
         `Choose which notifications you want to receive:\n\n` +
         `Tap on any option below to enable/disable:` +
         statusText,

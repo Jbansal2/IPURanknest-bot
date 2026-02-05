@@ -273,7 +273,7 @@ bot.start(async (ctx) => {
         };
         
         const welcomeText =
-            `✨ Welcome to IPU Updates Bot!\n\n` +
+            `✨ Welcome to IPU Ranknest Bot!\n\n` +
             `Choose which notifications you want to receive:\n\n` +
             `Tap on any option below to enable/disable:\n\n` +
             `📚 Commands:\n` +
@@ -342,7 +342,7 @@ bot.command('status', async (ctx) => {
 bot.command('help', async (ctx) => {
     console.log('Received /help from', ctx.from?.id, ctx.from?.username, 'chat', ctx.chat?.id);
     const message = `
-🤖 <b>IPU Updates Bot - Help</b>
+🤖 <b>IPU Ranknest Bot - Help</b>
 ━━━━━━━━━━━━━━━
 
 <b>Available Commands:</b>
@@ -360,7 +360,7 @@ bot.command('help', async (ctx) => {
 • Customize notification preferences
 • Monitor multiple IPU websites
 
-For support, contact: @YourUsername
+For support, contact: @jbansal2
 `;
     
     ctx.reply(message, { parse_mode: 'HTML' });
@@ -533,7 +533,7 @@ bot.action(/toggle_(.+)/, async (ctx) => {
             : `\n\n⚠️ No notifications enabled!`;
         
         await ctx.editMessageText(
-            `✨ Welcome to IPU Updates Bot!\n\n` +
+            `✨ Welcome to IPU Ranknest Bot!\n\n` +
             `Choose which notifications you want to receive:\n\n` +
             `Tap on any option below to enable/disable:` +
             statusText,
