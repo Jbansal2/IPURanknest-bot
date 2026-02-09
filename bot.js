@@ -726,6 +726,7 @@ async function main() {
         bot.launch({
             webhook: {
                 domain: process.env.WEBHOOK_DOMAIN,
+                path: '/api/webhook',
                 port: process.env.PORT || 3000
             }
         });

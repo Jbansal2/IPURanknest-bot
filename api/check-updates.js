@@ -272,10 +272,18 @@ module.exports = async (req, res) => {
         let changesDetected = [];
         let checksPerformed = [];
         
-        for (const [type, url] of Object.entries(URLS)) {
+        // Run hash checks in parallel
+        const hashPromises = Object.entries(URLS).map(async ([type, url]) => {
             const result = await getPageHash(url, type);
+            return { type, result };
+        });
+        
+        const hashResults = await Promise.all(hashPromises);
+        
+        for (const { type, result } of hashResults) {
             if (!result) continue;
             
+            const url = URLS[type];
             const lastUpdate = await updatesCollection.findOne({ type });
             
             if (!lastUpdate) {
