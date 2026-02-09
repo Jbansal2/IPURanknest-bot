@@ -23,11 +23,5 @@
       "src": "/(.*)",
       "dest": "api/health.js"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/updates?key=internal-cron-trigger",
-      "schedule": "*/15 * * * *"
-    }
   ]
 }

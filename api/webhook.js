@@ -104,6 +104,7 @@ async function getTop5Results(url, type) {
         
         // Extract top 5 items based on type
         if (type === 'result') {
+            console.log(`Found ${$('table tr').length} table rows for ${type}`);
             // Look for result links in table rows
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
@@ -141,6 +142,7 @@ async function getTop5Results(url, type) {
                 });
             }
         } else if (type === 'datesheet') {
+            console.log(`Found ${$('table tr').length} table rows for ${type}`);
             // Look for datesheet links
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
@@ -178,6 +180,7 @@ async function getTop5Results(url, type) {
                 });
             }
         } else if (type === 'circular') {
+            console.log(`Found ${$('table tr').length} table rows for ${type}`);
             // Look for circular/notice links in table
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
