@@ -36,7 +36,10 @@ const URLS = {
 // Verify request is authorized
 function verifyRequest(req) {
     const authHeader = req.headers['x-api-key'] || req.query.key;
-    return authHeader === process.env.API_KEY || authHeader === 'internal-cron-trigger';
+    // Allow explicit API key, internal cron token, or Vercel scheduled requests
+    if (authHeader === process.env.API_KEY || authHeader === 'internal-cron-trigger') return true;
+    if (req.headers['x-vercel-cron'] === 'true') return true;
+    return false;
 }
 
 async function getPageHash(url, type, retries = 2) {
@@ -109,17 +112,18 @@ async function getTop5Results(url, type) {
         const $ = cheerio.load(response.data);
         const results = [];
         
+        // First try: extract from table rows (preferred)
         $('table tr').each((i, row) => {
             if (results.length >= 5) return false;
-            
+
             const $row = $(row);
             const link = $row.find('a').first();
-            
+
             if (link.length > 0) {
                 const title = link.text().trim();
                 const href = link.attr('href') || '';
                 const dateTd = $row.find('td').last().text().trim();
-                
+
                 if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
                     if (type === 'circular') {
                         if (!title.toLowerCase().includes('about university') &&
@@ -134,6 +138,25 @@ async function getTop5Results(url, type) {
                 }
             }
         });
+
+        // Fallback: if table-based extraction yields nothing, scan all anchors on the page
+        if (results.length === 0) {
+            console.log(`[${type}] Table extraction returned 0 items — falling back to scanning anchors`);
+            const seen = new Set();
+            $('a').each((i, a) => {
+                if (results.length >= 5) return false;
+                const $a = $(a);
+                const text = $a.text().trim().replace(/\s+/g, ' ');
+                const href = $a.attr('href') || '';
+                if (!text || text.length <= 5) return;
+                const ltext = text.toLowerCase();
+                if (ltext.includes('read more') || ltext.includes('click here') || ltext.includes('home') || ltext.includes('title')) return;
+                const key = `${text}||${href}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                results.push({ text, link: href, date: '' });
+            });
+        }
         
         return results.slice(0, 5);
     } catch (error) {
@@ -221,6 +244,30 @@ module.exports = async (req, res) => {
         const db = await connectDB();
         const updatesCollection = db.collection('updates');
         const bot = new Telegraf(process.env.BOT_TOKEN);
+        // For testing: allow forcing notifications via query or header
+        console.log('Request query:', req.query);
+        const qForce = req.query && (req.query.force === true || req.query.force === 'true' || req.query.force === '1');
+        const hForce = req.headers && (req.headers['x-force'] === 'true' || req.headers['x-force'] === '1');
+        const forceNotify = qForce || hForce;
+        if (forceNotify) {
+            console.log('Force notify requested. Will send notifications regardless of hashes. (qForce=%s, hForce=%s)', qForce, hForce);
+            const usersCount = await db.collection('users').countDocuments({ active: true });
+            console.log('Active users:', usersCount);
+
+            const results = [];
+            for (const [type, url] of Object.entries(URLS)) {
+                try {
+                    const notifiedCount = await notifyUsers(bot, db, type, url);
+                    console.log(`Forced notify for ${type}: sent to ${notifiedCount} users`);
+                    results.push({ type, notified: notifiedCount });
+                } catch (e) {
+                    console.error(`Forced notify error for ${type}:`, e.message);
+                    results.push({ type, error: e.message });
+                }
+            }
+
+            return res.status(200).json({ success: true, forced: true, results });
+        }
         
         let changesDetected = [];
         let checksPerformed = [];
@@ -253,7 +300,10 @@ module.exports = async (req, res) => {
                     }
                 );
                 
+                const usersCount = await db.collection('users').countDocuments({ active: true });
+                console.log(`${type}: active users = ${usersCount}`);
                 const notifiedCount = await notifyUsers(bot, db, type, url);
+                console.log(`${type}: notified ${notifiedCount} users`);
                 changesDetected.push({ type, notifiedUsers: notifiedCount, newHash: result.hash });
             } else {
                 await updatesCollection.updateOne(

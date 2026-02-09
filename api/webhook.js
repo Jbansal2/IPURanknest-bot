@@ -107,15 +107,15 @@ async function getTop5Results(url, type) {
             // Look for result links in table rows
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
-                
+
                 const $row = $(row);
                 const link = $row.find('a').first();
-                
+
                 if (link.length > 0) {
                     const title = link.text().trim();
                     const href = link.attr('href') || '';
                     const date = $row.find('td').last().text().trim();
-                    
+
                     if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
                         results.push({ 
                             text: title,
@@ -125,19 +125,34 @@ async function getTop5Results(url, type) {
                     }
                 }
             });
+            if (results.length === 0) {
+                console.log('[result] Table extraction 0 — scanning anchors fallback');
+                const seen = new Set();
+                $('a').each((i, a) => {
+                    if (results.length >= 10) return false;
+                    const $a = $(a);
+                    const text = $a.text().trim().replace(/\s+/g, ' ');
+                    const href = $a.attr('href') || '';
+                    if (!text || text.length <= 5) return;
+                    const key = `${text}||${href}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    results.push({ text, link: href, date: '' });
+                });
+            }
         } else if (type === 'datesheet') {
             // Look for datesheet links
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
-                
+
                 const $row = $(row);
                 const link = $row.find('a').first();
-                
+
                 if (link.length > 0) {
                     const title = link.text().trim();
                     const href = link.attr('href') || '';
                     const date = $row.find('td').last().text().trim();
-                    
+
                     if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
                         results.push({ 
                             text: title,
@@ -147,21 +162,36 @@ async function getTop5Results(url, type) {
                     }
                 }
             });
+            if (results.length === 0) {
+                console.log('[datesheet] Table extraction 0 — scanning anchors fallback');
+                const seen = new Set();
+                $('a').each((i, a) => {
+                    if (results.length >= 10) return false;
+                    const $a = $(a);
+                    const text = $a.text().trim().replace(/\s+/g, ' ');
+                    const href = $a.attr('href') || '';
+                    if (!text || text.length <= 5) return;
+                    const key = `${text}||${href}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    results.push({ text, link: href, date: '' });
+                });
+            }
         } else if (type === 'circular') {
             // Look for circular/notice links in table
             $('table tr').each((i, row) => {
                 if (results.length >= 10) return false;
-                
+
                 const $row = $(row);
                 const link = $row.find('a').first();
-                
+
                 if (link.length > 0) {
                     const title = link.text().trim();
                     const href = link.attr('href') || '';
-                    
+
                     // Get date from last td
                     const dateTd = $row.find('td').last().text().trim();
-                    
+
                     // Filter out header rows and navigation items
                     if (title && 
                         title.length > 5 && 
@@ -179,6 +209,23 @@ async function getTop5Results(url, type) {
                     }
                 }
             });
+            if (results.length === 0) {
+                console.log('[circular] Table extraction 0 — scanning anchors fallback');
+                const seen = new Set();
+                $('a').each((i, a) => {
+                    if (results.length >= 10) return false;
+                    const $a = $(a);
+                    const text = $a.text().trim().replace(/\s+/g, ' ');
+                    const href = $a.attr('href') || '';
+                    if (!text || text.length <= 5) return;
+                    const ltext = text.toLowerCase();
+                    if (ltext.includes('about university') || ltext.includes('acts, statute') || ltext.includes('university...')) return;
+                    const key = `${text}||${href}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    results.push({ text, link: href, date: '' });
+                });
+            }
         }
         
         return results.slice(0, 10);
@@ -358,7 +405,6 @@ bot.command('help', async (ctx) => {
 • Customize notification preferences
 • Monitor multiple IPU websites
 
-For support, contact: @jbansal2
 `;
     
     ctx.reply(message, { parse_mode: 'HTML' });
