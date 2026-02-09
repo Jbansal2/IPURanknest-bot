@@ -102,133 +102,50 @@ async function getTop5Results(url, type) {
         const $ = cheerio.load(response.data);
         const results = [];
         
-        // Extract top 5 items based on type
-        if (type === 'result') {
-            console.log(`Found ${$('table tr').length} table rows for ${type}`);
-            // Look for result links in table rows
-            $('table tr').each((i, row) => {
-                if (results.length >= 10) return false;
+        // First try: extract from table rows (preferred)
+        $('table tr').each((i, row) => {
+            if (results.length >= 10) return false;
 
-                const $row = $(row);
-                const link = $row.find('a').first();
+            const $row = $(row);
+            const link = $row.find('a').first();
 
-                if (link.length > 0) {
-                    const title = link.text().trim();
-                    const href = link.attr('href') || '';
-                    const date = $row.find('td').last().text().trim();
+            if (link.length > 0) {
+                const title = link.text().trim();
+                const href = link.attr('href') || '';
+                const dateTd = $row.find('td').last().text().trim();
 
-                    if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
-                        results.push({ 
-                            text: title,
-                            link: href,
-                            date: date
-                        });
+                if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
+                    if (type === 'circular') {
+                        if (!title.toLowerCase().includes('about university') &&
+                            !title.toLowerCase().includes('acts, statute') &&
+                            !title.toLowerCase().includes('university...') &&
+                            dateTd.match(/\d{2}-\d{2}-\d{4}/)) {
+                            results.push({ text: title, link: href, date: dateTd });
+                        }
+                    } else {
+                        results.push({ text: title, link: href, date: dateTd });
                     }
                 }
-            });
-            if (results.length === 0) {
-                console.log('[result] Table extraction 0 — scanning anchors fallback');
-                const seen = new Set();
-                $('a').each((i, a) => {
-                    if (results.length >= 10) return false;
-                    const $a = $(a);
-                    const text = $a.text().trim().replace(/\s+/g, ' ');
-                    const href = $a.attr('href') || '';
-                    if (!text || text.length <= 5) return;
-                    const key = `${text}||${href}`;
-                    if (seen.has(key)) return;
-                    seen.add(key);
-                    results.push({ text, link: href, date: '' });
-                });
             }
-        } else if (type === 'datesheet') {
-            console.log(`Found ${$('table tr').length} table rows for ${type}`);
-            // Look for datesheet links
-            $('table tr').each((i, row) => {
+        });
+
+        // Fallback: if table-based extraction yields nothing, scan all anchors on the page
+        if (results.length === 0) {
+            console.log(`[${type}] Table extraction returned 0 items — falling back to scanning anchors`);
+            const seen = new Set();
+            $('a').each((i, a) => {
                 if (results.length >= 10) return false;
-
-                const $row = $(row);
-                const link = $row.find('a').first();
-
-                if (link.length > 0) {
-                    const title = link.text().trim();
-                    const href = link.attr('href') || '';
-                    const date = $row.find('td').last().text().trim();
-
-                    if (title && title.length > 5 && !title.toLowerCase().includes('title') && !title.toLowerCase().includes('s.no')) {
-                        results.push({ 
-                            text: title,
-                            link: href,
-                            date: date
-                        });
-                    }
-                }
+                const $a = $(a);
+                const text = $a.text().trim().replace(/\s+/g, ' ');
+                const href = $a.attr('href') || '';
+                if (!text || text.length <= 5) return;
+                const ltext = text.toLowerCase();
+                if (ltext.includes('read more') || ltext.includes('click here') || ltext.includes('home') || ltext.includes('title')) return;
+                const key = `${text}||${href}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                results.push({ text, link: href, date: '' });
             });
-            if (results.length === 0) {
-                console.log('[datesheet] Table extraction 0 — scanning anchors fallback');
-                const seen = new Set();
-                $('a').each((i, a) => {
-                    if (results.length >= 10) return false;
-                    const $a = $(a);
-                    const text = $a.text().trim().replace(/\s+/g, ' ');
-                    const href = $a.attr('href') || '';
-                    if (!text || text.length <= 5) return;
-                    const key = `${text}||${href}`;
-                    if (seen.has(key)) return;
-                    seen.add(key);
-                    results.push({ text, link: href, date: '' });
-                });
-            }
-        } else if (type === 'circular') {
-            console.log(`Found ${$('table tr').length} table rows for ${type}`);
-            // Look for circular/notice links in table
-            $('table tr').each((i, row) => {
-                if (results.length >= 10) return false;
-
-                const $row = $(row);
-                const link = $row.find('a').first();
-
-                if (link.length > 0) {
-                    const title = link.text().trim();
-                    const href = link.attr('href') || '';
-
-                    // Get date from last td
-                    const dateTd = $row.find('td').last().text().trim();
-
-                    // Filter out header rows and navigation items
-                    if (title && 
-                        title.length > 5 && 
-                        !title.toLowerCase().includes('title') && 
-                        !title.toLowerCase().includes('notices') &&
-                        !title.toLowerCase().includes('about university') &&
-                        !title.toLowerCase().includes('acts, statute') &&
-                        !title.toLowerCase().includes('university...') &&
-                        dateTd.match(/\d{2}-\d{2}-\d{4}/)) {  // Must have date format
-                        results.push({ 
-                            text: title,
-                            link: href,
-                            date: dateTd
-                        });
-                    }
-                }
-            });
-            if (results.length === 0) {
-                console.log('[circular] Table extraction 0 — scanning anchors fallback');
-                const seen = new Set();
-                $('a').each((i, a) => {
-                    if (results.length >= 10) return false;
-                    const $a = $(a);
-                    const text = $a.text().trim().replace(/\s+/g, ' ');
-                    const href = $a.attr('href') || '';
-                    if (!text || text.length <= 5) return;
-                    const ltext = text.toLowerCase();
-                    if (ltext.includes('about university') || ltext.includes('acts, statute') || ltext.includes('university...')) return;
-                    const key = `${text}||${href}`;
-                    if (seen.has(key)) return;
-                    seen.add(key);
-                    results.push({ text, link: href, date: '' });
-                });
-            }
         }
         
         console.log(`getTop5Results for ${type} returned ${results.length} items`);
