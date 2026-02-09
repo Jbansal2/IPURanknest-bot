@@ -228,6 +228,7 @@ async function getTop5Results(url, type) {
             }
         }
         
+        console.log(`getTop5Results for ${type} returned ${results.length} items`);
         return results.slice(0, 10);
     } catch (error) {
         console.error(`Error fetching top results for ${type}:`, error.message);
