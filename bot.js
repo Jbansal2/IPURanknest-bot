@@ -4,12 +4,108 @@ const cron = require('node-cron');
 const axios = require('axios');
 const cheerio = require('cheerio');
 require('dotenv').config();
+const express = require("express");
+const app = express();
+// Parse JSON bodies for incoming webhook requests
+app.use(express.json());
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// Environment-backed server/webhook configuration
+const PORT = process.env.PORT || 3000;
+const DOMAIN = process.env.WEBHOOK_DOMAIN || process.env.DOMAIN || `http://localhost:${PORT}`;
+const webhookPath = process.env.WEBHOOK_PATH || '/api/webhook';
+
+// Use test bot token for development (with fallback to production token)
+const TEST_BOT_TOKEN = process.env.TEST_BOT_TOKEN;
+const PRODUCTION_BOT_TOKEN = process.env.BOT_TOKEN;
+
+let BOT_TOKEN;
+let isTestBot = false;
+
+if (process.env.NODE_ENV === 'production') {
+    BOT_TOKEN = PRODUCTION_BOT_TOKEN;
+    console.log('🚀 Using PRODUCTION bot token');
+} else {
+    // Check if test token is properly set (not placeholder)
+    if (TEST_BOT_TOKEN && 
+        TEST_BOT_TOKEN !== 'YOUR_TEST_BOT_TOKEN_HERE' && 
+        TEST_BOT_TOKEN !== 'PUT_YOUR_NEW_TEST_BOT_TOKEN_HERE' && 
+        TEST_BOT_TOKEN.includes(':') && 
+        TEST_BOT_TOKEN.length > 20) {
+        BOT_TOKEN = TEST_BOT_TOKEN;
+        isTestBot = true;
+        console.log('🧪 Using TEST bot token');
+    } else {
+        BOT_TOKEN = PRODUCTION_BOT_TOKEN;
+        console.log('⚠️  TEST_BOT_TOKEN not properly set - Using PRODUCTION bot token for local development');
+        console.log('💡 Tip: Create a test bot with @BotFather and set TEST_BOT_TOKEN in .env');
+    }
+}
+
+const bot = new Telegraf(BOT_TOKEN);
 let db;
 let usersCollection;
 let updatesCollection;
 let logsCollection;
+
+// Health check endpoint (always available)
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'active',
+        service: 'ipu-ranknest-bot',
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+// Basic home route
+app.get("/", (req, res) => {
+    res.send("IPU Bot Webhook Running 🚀");
+});
+
+// Updates endpoint (available immediately) 
+app.all('/api/updates', async (req, res) => {
+    try {
+        const key = req.query.key || req.headers['x-api-key'] || req.headers['x-key'];
+        if (!key || (key !== process.env.API_KEY && key !== 'internal-cron-trigger')) {
+            return res.status(401).json({ ok: false, error: 'Unauthorized - Please provide valid API key' });
+        }
+
+        console.log('🔄 Manual update check triggered via API...');
+
+        // Check if DB is connected
+        if (!db) {
+            console.log('DB not connected, connecting...');
+            await connectDB();
+        }
+
+        // Optionally run in background to respond quickly
+        const runInBackground = req.query.background === 'true' || req.headers['x-background'] === 'true';
+
+        if (runInBackground) {
+            res.status(200).json({ ok: true, background: true, timestamp: new Date().toISOString() });
+            setTimeout(() => { checkForUpdates().catch(e => console.error('Background check error:', e)); }, 10);
+            return;
+        }
+
+        await checkForUpdates();
+        return res.status(200).json({ ok: true, message: 'Updates checked successfully', checkedAt: new Date().toISOString() });
+    } catch (error) {
+        console.error('Updates endpoint error:', error);
+        return res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Webhook endpoint for Telegram 
+app.post(webhookPath, async (req, res) => {
+    try {
+        await bot.handleUpdate(req.body);
+        return res.status(200).send('OK');
+    } catch (error) {
+        console.error('Webhook handling error:', error);
+        return res.status(500).send('Internal Server Error');
+    }
+});
 
 // MongoDB Connection
 async function connectDB() {
@@ -330,32 +426,38 @@ async function notifyUsers(type, url) {
     if (latestResults.length > 0) {
         message += '<b>Latest Updates:</b>\n\n';
         latestResults.slice(0, 3).forEach((item, i) => {
-            const cleanedText = cleanText(item.text);
-            message += `${i + 1}. ${cleanedText}`;
             if (item.date) {
-                message += `\n   📅 <i>${item.date}</i>`;
+                message += `📅 <i>${item.date}</i>\\n`;
             }
-            message += '\n\n';
+            const cleanedText = cleanText(item.text);
+            message += `${i + 1}. ${cleanedText}\\n\\n`;
         });
     } else {
-        message += 'New update available!\n\n';
+        message += 'New update available!\\n\\n';
     }
     
-    message += `🔗 <a href="${url}">View All Updates</a>\n\n`;
     message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
     
     let notifiedCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
     
-    for (const user of users) {
+            for (const user of users) {
         try {
             // Check if user has this notification type enabled
             const prefs = user.preferences || { results: true, datesheet: true, circular: true };
             const prefKey = prefKeys[type];
             
             if (prefs[prefKey] === true) {
-                await bot.telegram.sendMessage(user.chatId, message, { parse_mode: 'HTML' });
+                const sendOptions = {
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [[{ text: '🔗 View All Updates', url }]]
+                    }
+                };
+
+                await bot.telegram.sendMessage(user.chatId, message, sendOptions);
                 notifiedCount++;
             } else {
                 skippedCount++;
@@ -561,8 +663,24 @@ bot.command('status', async (ctx) => {
 // Command to check latest results
 bot.command('results', async (ctx) => {
     try {
+        // Fetch latest results from IPU website
+        const latestResults = await getTop5Results(URLS.result, 'result');
+        
         let message = `<b>🎓 Exam Results</b>\n━━━━━━━━━━━━━━━\n\n`;
-        message += `🔗 <a href="${URLS.result}">View All Results</a>\n\n`;
+        
+        if (latestResults.length > 0) {
+            message += '<b>Latest Results:</b>\n\n';
+            latestResults.forEach((item, i) => {
+                if (item.date) {
+                    message += `📅 <i>${item.date}</i>\n`;
+                }
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}\n\n`;
+            });
+        } else {
+            message += 'No recent results found or unable to fetch data.\n\n';
+        }
+        
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
         await logEvent('manual_check', {
@@ -571,7 +689,7 @@ bot.command('results', async (ctx) => {
             type: 'results'
         });
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Results', url: URLS.result }]] } });
     } catch (error) {
         console.error('Error in /results command:', error);
         ctx.reply('❌ An error occurred while fetching results.');
@@ -581,8 +699,24 @@ bot.command('results', async (ctx) => {
 // Command to check latest datesheet
 bot.command('datesheet', async (ctx) => {
     try {
+        // Fetch latest datesheets from IPU website
+        const latestResults = await getTop5Results(URLS.datesheet, 'datesheet');
+        
         let message = `<b>📅 Datesheets</b>\n━━━━━━━━━━━━━━━\n\n`;
-        message += `🔗 <a href="${URLS.datesheet}">View All Datesheets</a>\n\n`;
+        
+        if (latestResults.length > 0) {
+            message += '<b>Latest Datesheets:</b>\n\n';
+            latestResults.forEach((item, i) => {
+                if (item.date) {
+                    message += `📅 <i>${item.date}</i>\n`;
+                }
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}\n\n`;
+            });
+        } else {
+            message += 'No recent datesheets found or unable to fetch data.\n\n';
+        }
+        
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
         await logEvent('manual_check', {
@@ -591,7 +725,7 @@ bot.command('datesheet', async (ctx) => {
             type: 'datesheet'
         });
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Datesheets', url: URLS.datesheet }]] } });
     } catch (error) {
         console.error('Error in /datesheet command:', error);
         ctx.reply('❌ An error occurred while fetching datesheet.');
@@ -601,8 +735,24 @@ bot.command('datesheet', async (ctx) => {
 // Command to check latest circulars
 bot.command('circular', async (ctx) => {
     try {
+        // Fetch latest circulars from IPU website
+        const latestResults = await getTop5Results(URLS.circular, 'circular');
+        
         let message = `<b>📢 Circulars/Notices</b>\n━━━━━━━━━━━━━━━\n\n`;
-        message += `🔗 <a href="${URLS.circular}">View All Circulars</a>\n\n`;
+        
+        if (latestResults.length > 0) {
+            message += '<b>Latest Circulars:</b>\n\n';
+            latestResults.forEach((item, i) => {
+                if (item.date) {
+                    message += `📅 <i>${item.date}</i>\n`;
+                }
+                const cleanedText = cleanText(item.text);
+                message += `${i + 1}. ${cleanedText}\n\n`;
+            });
+        } else {
+            message += 'No recent circulars found or unable to fetch data.\n\n';
+        }
+        
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
         await logEvent('manual_check', {
@@ -611,7 +761,7 @@ bot.command('circular', async (ctx) => {
             type: 'circular'
         });
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Circulars', url: URLS.circular }]] } });
     } catch (error) {
         console.error('Error in /circular command:', error);
         ctx.reply('❌ An error occurred while fetching circulars.');
@@ -719,23 +869,55 @@ async function main() {
     
     // Initial check
     setTimeout(checkForUpdates, 5000);
-    
-    // Start bot
-    if (process.env.NODE_ENV === 'production') {
-        // Webhook mode for Vercel
-        bot.launch({
-            webhook: {
-                domain: process.env.WEBHOOK_DOMAIN,
-                path: '/api/webhook',
-                port: process.env.PORT || 3000
+
+    // For local development, use polling instead of webhooks
+    if (process.env.NODE_ENV !== 'production') {
+        
+        // Check if Telegram should be disabled (API-only testing)
+        if (process.env.DISABLE_TELEGRAM === 'true') {
+            console.log('🔧 Telegram disabled - Running in API-only mode');
+            console.log('🌐 Test URLs available:');
+            console.log('   Health: http://localhost:3000/api/health');
+            console.log('   Updates: http://localhost:3000/api/updates?key=internal-cron-trigger');
+            console.log('💡 To enable Telegram: remove DISABLE_TELEGRAM=true from .env');
+            return; // Skip Telegram setup
+        }
+        
+        console.log('🔄 Starting bot in POLLING mode (local development)...');
+        
+        // Clear any existing webhooks first
+        try {
+            await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+            console.log('✅ Cleared existing webhooks');
+        } catch (e) {
+            console.log('⚠️ No webhooks to clear:', e.message);
+        }
+        
+        bot.launch({ 
+            polling: {
+                timeout: 30,
+                limit: 100,
+                allowedUpdates: ['message', 'callback_query', 'inline_query']
             }
         });
-    } else {
-        // Polling mode for local development
-        bot.launch();
+        console.log('🤖 Bot started in polling mode!');
+        return; // Skip webhook setup for local
     }
-    
-    console.log('🤖 Bot started successfully!');
+
+    // Start server
+    app.listen(PORT, async () => {
+        console.log(`🌍 Server running on port ${PORT}`);
+
+        // Remove any old webhook first
+        await bot.telegram.deleteWebhook();
+
+        // Set new webhook
+        await bot.telegram.setWebhook(`${DOMAIN}${webhookPath}`);
+
+        console.log("🔗 Webhook set successfully!");
+    });
+
+    console.log("🤖 Bot started successfully!");
 }
 
 // Handle graceful shutdown

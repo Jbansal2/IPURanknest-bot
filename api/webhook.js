@@ -298,7 +298,7 @@ bot.command('status', async (ctx) => {
         message += `• 📢 Circulars\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Results', url: URLS.result }]] } });
     } catch (error) {
         console.error('Status error:', error);
         ctx.reply('Error fetching status.');
@@ -355,7 +355,7 @@ bot.command('results', async (ctx) => {
         message += `🔗 <a href="${URLS.result}">View All Results</a>\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Datesheets', url: URLS.datesheet }]] } });
     } catch (error) {
         console.error('Error in /results command:', error);
         ctx.reply('❌ An error occurred while fetching results.');
@@ -386,7 +386,7 @@ bot.command('datesheet', async (ctx) => {
         message += `🔗 <a href="${URLS.datesheet}">View All Datesheets</a>\n\n`;
         message += `⏰ <i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`;
         
-        ctx.reply(message, { parse_mode: 'HTML' });
+        ctx.reply(message, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔗 View All Circulars', url: URLS.circular }]] } });
     } catch (error) {
         console.error('Error in /datesheet command:', error);
         ctx.reply('❌ An error occurred while fetching datesheets.');
@@ -530,32 +530,48 @@ bot.catch(async (err, ctx) => {
 
 module.exports = async (req, res) => {
     try {
-        // Ensure DB connection
-        await connectDB();
-        // Idempotency: check already-processed Telegram update_id
-        const updateId = req.body && (req.body.update_id || req.body.update?.update_id);
-        if (updateId) {
-            const seen = await processedUpdatesCollection.findOne({ update_id: updateId });
-            if (seen) return res.status(200).json({ ok: true, skipped: true });
+        // Quick health for GET
+        if (req.method === 'GET') {
+            return res.status(200).json({ status: 'Bot is running', timestamp: new Date().toISOString() });
         }
-        
+
+        // Ensure body is parsed (some hosts forward raw strings)
+        let body = req.body;
+        if (typeof body === 'string' && body.length > 0) {
+            try { body = JSON.parse(body); } catch (e) { /* ignore */ }
+        }
+
+        // Fast-acknowledge POSTs from Telegram to avoid webhook timeouts
         if (req.method === 'POST') {
-            // Handle incoming Telegram updates
-            await bot.handleUpdate(req.body);
-            // mark update as processed (best-effort)
-            if (updateId) {
-                try { await processedUpdatesCollection.insertOne({ update_id: updateId, receivedAt: new Date() }); } catch (e) {}
-            }
-            return res.status(200).json({ ok: true });
-        } else if (req.method === 'GET') {
-            // Health check
-            return res.status(200).json({ 
-                status: 'Bot is running',
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            return res.status(405).json({ error: 'Method not allowed' });
+            const updateId = body && (body.update_id || body.update?.update_id);
+
+            // Respond quickly to Telegram
+            res.status(200).json({ ok: true });
+
+            // Process in background (best-effort)
+            (async () => {
+                try {
+                    await connectDB();
+
+                    if (updateId) {
+                        const seen = await processedUpdatesCollection.findOne({ update_id: updateId });
+                        if (seen) return; // already processed
+                    }
+
+                    await bot.handleUpdate(body);
+
+                    if (updateId) {
+                        try { await processedUpdatesCollection.insertOne({ update_id: updateId, receivedAt: new Date() }); } catch (e) {}
+                    }
+                } catch (err) {
+                    console.error('Background webhook processing error:', err);
+                }
+            })();
+
+            return; // already responded
         }
+
+        return res.status(405).json({ error: 'Method not allowed' });
     } catch (error) {
         console.error('❌ Webhook error:', error);
         return res.status(500).json({ error: 'Internal server error', message: error.message });
